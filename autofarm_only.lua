@@ -275,6 +275,64 @@ do
     end)
 end
 
+-- resizing: drag the corner grip (bottom right). Same release-safe pointer loop as the
+-- drag above; the pointer delta is divided by the window scale so it tracks your cursor.
+do
+    local MIN_W, MIN_H, MAX_W, MAX_H = 250, 260, 600, 1400
+    local grip = make("TextButton", {
+        Name = "ResizeGrip", Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -22, 1, -22),
+        BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 20,
+    }, panel)
+    for i = 1, 3 do   -- three little diagonal lines, like a normal resize corner
+        local len = 3 + i * 3
+        make("Frame", {
+            Size = UDim2.fromOffset(len, 2), AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromOffset(23 - 4 * i, 23 - 4 * i),
+            Rotation = -45, BackgroundColor3 = T.sub, BorderSizePixel = 0, ZIndex = 21,
+        }, grip)
+    end
+    local R = { input = nil, mouse = false, sx = 0, sy = 0, w = 0, h = 0, conn = nil }
+    local function rptr()
+        if R.mouse then
+            local m = UserInputService:GetMouseLocation()
+            return m.X, m.Y
+        end
+        local p = R.input.Position
+        return p.X, p.Y
+    end
+    local function stopResize()
+        R.input = nil
+        if R.conn then R.conn:Disconnect() R.conn = nil end
+    end
+    grip.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            stopResize()
+            R.input = input
+            R.mouse = input.UserInputType == Enum.UserInputType.MouseButton1
+            R.sx, R.sy = rptr()
+            R.w, R.h = panel.Size.X.Offset, panel.Size.Y.Offset
+            R.conn = RunService.RenderStepped:Connect(function()
+                if not R.input or not panel.Parent then stopResize() return end
+                local released
+                if R.mouse then
+                    released = not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                else
+                    local st = R.input.UserInputState
+                    released = st == Enum.UserInputState.End or st == Enum.UserInputState.Cancel
+                end
+                if released then stopResize() return end
+                local x, y = rptr()
+                local sc = panel:FindFirstChild("WinScale")
+                local k = sc and sc.Scale or 1
+                panel.Size = UDim2.fromOffset(
+                    math.clamp(R.w + (x - R.sx) / k, MIN_W, MAX_W),
+                    math.clamp(R.h + (y - R.sy) / k, MIN_H, MAX_H))
+            end)
+        end
+    end)
+    gui.Destroying:Connect(stopResize)
+end
+
 -- stats strip: FPS + ping with small icons (colour = how healthy the number is)
 local statsBar = make("Frame", {
     Size = UDim2.new(1, -24, 0, 20), Position = UDim2.fromOffset(12, 48), BackgroundTransparency = 1,
@@ -312,7 +370,7 @@ local statusBar = make("Frame", {
 
 -- everything else lives in a scrolling body made of collapsible sections
 local body = make("ScrollingFrame", {
-    Size = UDim2.new(1, -24, 1, -118), Position = UDim2.fromOffset(12, 110), BackgroundTransparency = 1,
+    Size = UDim2.new(1, -24, 1, -130), Position = UDim2.fromOffset(12, 110), BackgroundTransparency = 1,
     BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.line,
     CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
     ScrollingDirection = Enum.ScrollingDirection.Y,
